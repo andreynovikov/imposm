@@ -78,9 +78,9 @@ class TupleBasedImporter(ImporterProcess):
 
             if isinstance(osm_elem.geom, (list)):
                 for geom in osm_elem.geom:
-                    insert_data.append((osm_id, db.geom_wrapper(geom)) + tuple(extra_args))
+                    insert_data.append([osm_id, db.geom_wrapper(geom)] + extra_args)
             else:
-                insert_data.append((osm_id, db.geom_wrapper(osm_elem.geom)) + tuple(extra_args))
+                insert_data.append([osm_id, db.geom_wrapper(osm_elem.geom)] + extra_args)
 
             if len(insert_data) >= 128:
                 if not dry_run:

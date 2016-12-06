@@ -101,7 +101,7 @@ def merge_relation_members(a, b):
 
 class OSMElem(object):
     __slots__ = 'osm_id name coords cls type tags geom'.split()
-    
+
     def __init__(self, osm_id, coords, type, tags):
         self.osm_id = osm_id
         self.name = tags.get('name')

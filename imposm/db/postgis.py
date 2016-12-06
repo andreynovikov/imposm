@@ -100,6 +100,11 @@ class PostGISDB(object):
 
     def insert(self, mapping, insert_data, tries=0):
         insert_stmt = self.insert_stmt(mapping)
+        if mapping.fields:
+            for i, (n, t) in enumerate(mapping.fields):
+                if hasattr(t, 'geom_type'):
+                    for data in insert_data:
+                        data[i+2] = self.geom_wrapper(data[i+2])
         try:
             if tries:
                 self.reconnect()
@@ -140,7 +145,10 @@ class PostGISDB(object):
         self.connection.commit()
 
     def geom_wrapper(self, geom):
-        return psycopg2.Binary(geom.wkb)
+        if geom:
+            return psycopg2.Binary(geom.wkb)
+        else:
+            return None
 
     def reconnect(self):
         if self._connection:
@@ -158,17 +166,24 @@ class PostGISDB(object):
         return self._insert_stmts[mapping.name]
 
     def _insert_stmt(self, mapping):
-        extra_arg_names = extra_args = ''
+        extra_arg_names = []
+        extra_args = []
+        extra_arg_name_string = ''
+        extra_arg_string = ''
         if mapping.fields:
-            extra_arg_names = [n for n, t in mapping.fields]
-            extra_args = ', %s' * len(extra_arg_names)
-            extra_arg_names = ', ' + ', '.join('"' + name + '"' for name in extra_arg_names)
+            for n, t in mapping.fields:
+                extra_arg_names.append('"' + n + '"')
+                if hasattr(t, 'geom_type'):
+                    extra_args.append('ST_Transform(ST_GeomFromWKB(%%s, 4326), %(srid)s)' % dict(srid=self.srid))
+                else:
+                    extra_args.append('%s')
+            extra_arg_string = ', ' + ', '.join(extra_args)
+            extra_arg_name_string = ', ' + ', '.join(extra_arg_names)
         return """INSERT INTO "%(tablename)s"
-            (osm_id, geometry %(extra_arg_names)s)
-            VALUES (%%s, ST_Transform(ST_GeomFromWKB(%%s, 4326), %(srid)s)
-                %(extra_args)s)
+            (osm_id, geometry%(extra_arg_names)s)
+            VALUES (%%s, ST_Transform(ST_GeomFromWKB(%%s, 4326), %(srid)s)%(extra_args)s)
         """.strip() % dict(tablename=self.table_prefix + mapping.name, srid=self.srid,
-            extra_arg_names=extra_arg_names, extra_args=extra_args)
+            extra_arg_names=extra_arg_name_string, extra_args=extra_arg_string)
 
 
     def create_tables(self, mappings):
@@ -189,8 +204,11 @@ class PostGISDB(object):
 
         extra_fields = ''
         for n, t in mapping.fields:
-            extra_fields += ', "%s" %s ' % (n, t.column_type)
-
+            if hasattr(t, 'column_type'):
+                extra_fields += ', "%s" %s ' % (n, t.column_type)
+            if hasattr(t, 'geom_type'):
+                extra_fields += ', "%(name)s" geometry(%(pg_geometry_type)s, %(srid)s) ' % dict(name=n, srid=self.srid,
+                    pg_geometry_type=t.geom_type)
         if config.imposm_pg_serial_id:
             serial_column = "id SERIAL PRIMARY KEY,"
         else:

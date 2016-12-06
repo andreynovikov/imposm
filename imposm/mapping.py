@@ -17,6 +17,12 @@ from __future__ import division
 import math
 import imposm.geom
 
+from shapely.geos import TopologicalError
+from shapely.ops import polylabel
+
+import logging
+log = logging.getLogger(__name__)
+
 ANY = '__any__'
 
 __all__ = [
@@ -40,20 +46,6 @@ __all__ = [
     'UnionView',
     'set_default_name_field',
 ]
-
-default_name_field = None
-
-def set_default_name_type(type, column_name='name'):
-    """
-    Set new default type for 'name' field.
-
-    ::
-
-        set_default_name_type(LocalizedName(['name:en', 'int_name', 'name']))
-
-    """
-    global default_name_field
-    default_name_field = column_name, type
 
 # changed by imposm.app if the projection is epsg:4326
 import_srs_is_geographic = False
@@ -86,8 +78,9 @@ class Mapping(object):
     classname = None
     _insert_stmt = None
     with_type_field = True
+    with_label_field = False
 
-    def __init__(self, name, mapping, fields=None, field_filter=None, with_type_field=None):
+    def __init__(self, name, mapping, fields=None, field_filter=None, with_type_field=None, with_label_field=None):
         self.name = name
         self.mapping = mapping
         self.fields = fields or tuple(self.fields)
@@ -96,19 +89,11 @@ class Mapping(object):
             # allow subclass to define other default by setting it as class variable
             self.with_type_field = with_type_field
         self._add_type_field()
-        self._add_name_field()
+        if with_label_field:
+            self.with_label_field = with_label_field
+            self.fields = (('label', Label()),) + self.fields
         if field_filter:
             self.field_filter = field_filter
-
-    def _add_name_field(self):
-        """
-        Add name field to default if not set.
-        """
-        if not any(1 for name, _type in self.fields if name == 'name'):
-            if default_name_field:
-                self.fields = (default_name_field,) + self.fields
-            else:
-                self.fields = (('name', Name()),) + self.fields
 
     def _add_type_field(self):
         """
@@ -160,6 +145,8 @@ class Mapping(object):
         result = dict((n, t.value(osm_elem.tags.get(n), osm_elem)) for n, t in self.fields)
         if self.with_type_field:
             del result['type']
+        if self.with_label_field:
+            del result['label']
         result[osm_elem.cls] = osm_elem.type
         return result
 
@@ -348,7 +335,6 @@ class Polygons(Mapping):
     """
     skip_inserted_ways = True
 
-
 class BoundaryPolygons(Polygons):
     """
     Table class for boundary polygon features.
@@ -368,6 +354,7 @@ class GeneralizedTable(object):
         self.classname = origin.name
         self.fields = self.origin.fields
         self.with_type_field = self.origin.with_type_field
+        self.with_label_field = self.origin.with_label_field
         self.where = where
 
 class FixInvalidPolygons(object):
@@ -386,18 +373,7 @@ class UnionView(object):
         self.name = name
         self.mappings = mappings
         self.fields = fields
-        self._add_name_field()
         self._add_type_field()
-
-    def _add_name_field(self):
-        """
-        Add name field to default if not set.
-        """
-        if not any(1 for name, _type in self.fields if name == 'name'):
-            if default_name_field:
-                self.fields = ((default_name_field[0], ''),) + self.fields
-            else:
-                self.fields = (('name', ''),) + self.fields
 
     def _add_type_field(self):
         """
@@ -406,10 +382,8 @@ class UnionView(object):
         if 'type' not in self.fields and any(m.with_type_field for m in self.mappings):
             self.fields += (('type', None), )
 
-
 class DropElem(Exception):
     pass
-
 
 class FieldType(object):
     def extra_fields(self):
@@ -764,6 +738,21 @@ class WayZOrder(FieldType):
             return int(l)
         except ValueError:
             return 0
+
+class Label(FieldType):
+    geom_type = "POINT"
+
+    def extra_fields(self):
+        return []
+
+    def value(self, val, osm_elem):
+        if osm_elem.geom.type != 'Polygon':
+            return None
+        try:
+            return polylabel(osm_elem.geom)
+        except TopologicalError, ex:
+            log.warn("Polylabel error for %s: %s", osm_elem.osm_id, ex)
+            return None
 
 class Options(dict):
     def __setattr__(self, name, value):
