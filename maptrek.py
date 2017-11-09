@@ -283,6 +283,7 @@ class Highway(LineStrings):
         ('oneway', Direction()),
         ('ref', String()),
         ('access', String()),
+        ('service', String()),
         ('z_order', WayZOrder()),
     )
     field_filter = (
@@ -311,8 +312,68 @@ mainroads = Highway(
             'secondary_link',
             'tertiary',
             'tertiary_link',
-            'road',
             'unclassified',
+        ),
+    }
+)
+
+minorroads = Highway(
+    name = 'minorroads',
+    mapping = {
+        'highway': (
+            'service',
+            'living_street',
+            'residential',
+            'pedestrian',
+            'construction',
+            'road',
+        ),
+    }
+)
+
+tracks = LineStrings(
+    name = 'tracks',
+    fields = (
+        ('name', Name()),
+        ('name:en', Name()),
+        ('name:de', Name()),
+        ('name:ru', Name()),
+        ('tunnel', Bool()),
+        ('bridge', Bool()),
+        ('layer', Integer()),
+        ('access', String()),
+        ('tracktype', String()),
+    ),
+    field_filter = (
+        ('area', Bool()),
+    ),
+    mapping = {
+        'highway': (
+            'track',
+        ),
+    }
+)
+
+paths = LineStrings(
+    name = 'paths',
+    fields = (
+        ('tunnel', Bool()),
+        ('bridge', Bool()),
+        ('layer', Integer()),
+        ('access', String()),
+        ('oneway', Direction()),
+        ('z_order', WayZOrder()),
+    ),
+    field_filter = (
+        ('area', Bool()),
+    ),
+    mapping = {
+        'highway': (
+            'bridleway',
+            'cycleway',
+            'path',
+            'footway',
+            'steps',
         ),
     }
 )
@@ -662,6 +723,49 @@ urbanareas = Polygons(
         ),
         'tourism': (
             'picnic_site',
+        ),
+    },
+)
+
+topoways = LineStrings(
+    name = 'topoways',
+    fields = (
+        ('class', Class()),
+    ),
+    mapping = {
+        'power': (
+            'line',
+        ),
+        'natural': (
+            'cliff',
+        ),
+    },
+)
+
+topopoints = Points(
+    name = 'topopoints',
+    fields = (
+        ('class', Class()),
+        ('name', Name()),
+        ('name:en', Name()),
+        ('name:de', Name()),
+        ('name:ru', Name()),
+        ('ele', String()),
+    ),
+    mapping = {
+        'power': (
+            'tower',
+        ),
+        'man_made': (
+            'tower',
+        ),
+        'natural': (
+            'volcano',
+            'peak',
+            'cave_entrance',
+            'spring',
+            'tree',
+            'mountain_pass',
         ),
     },
 )
